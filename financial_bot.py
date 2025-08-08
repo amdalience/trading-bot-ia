@@ -1,6 +1,6 @@
 """
-🧠 Bot d'Analyse Financière IA - Version Optimisée
-Système intelligent d'analyse et d'alertes pour les marchés financiers
+🧠 Bot d'Analyse Financière IA - Version Simplifiée Compatible
+Version sans TA-Lib pour déploiement facile sur Render
 """
 
 import os
@@ -8,14 +8,13 @@ import json
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass
 import requests
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import yfinance as yf
-import ta
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 import warnings
@@ -27,9 +26,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AlertConfig:
-    """Configuration des alertes personnalisable"""
+    """Configuration des alertes"""
     whatsapp_enabled: bool = True
-    telegram_enabled: bool = False
     auto_frequency_minutes: int = 15
     min_breakout_strength: float = 0.6
     ai_confidence_threshold: float = 65.0
@@ -46,92 +44,76 @@ class MarketAlert:
     timeframe: str
     price: float
 
-class EnhancedMarketAnalyzer:
-    """Analyseur de marché avec IA améliorée"""
+class SimplifiedMarketAnalyzer:
+    """Analyseur de marché simplifié sans TA-Lib"""
     
     ASSETS = {
         'NASDAQ': '^IXIC',
         'SP500': '^GSPC', 
         'GOLD': 'GC=F',
         'WTI_OIL': 'CL=F',
-        'BRENT': 'BZ=F',
-        'VIX': '^VIX',  # Ajout volatilité
-        'DXY': 'DX-Y.NYB'  # Index dollar
+        'VIX': '^VIX',
+        'DXY': 'DX-Y.NYB'
     }
-    
-    TIMEFRAMES = ['5m', '15m', '30m', '1h', '4h', '1d']
     
     def __init__(self, config: AlertConfig):
         self.config = config
         self.ml_models = {}
         self.scaler = StandardScaler()
-        self.alerts_history = []
         self.market_data_cache = {}
         
-    async def initialize_ai_models(self):
-        """Initialise les modèles IA pour chaque actif"""
-        logger.info("🤖 Initialisation des modèles IA...")
-        
-        for asset_name, symbol in self.ASSETS.items():
-            try:
-                # Récupération données historiques pour entraînement
-                data = yf.download(symbol, period='6mo', interval='1h')
-                if len(data) > 100:
-                    features, targets = self._prepare_ml_features(data)
-                    if len(features) > 50:
-                        model = RandomForestClassifier(
-                            n_estimators=100,
-                            max_depth=10,
-                            random_state=42
-                        )
-                        model.fit(features, targets)
-                        self.ml_models[asset_name] = model
-                        logger.info(f"✅ Modèle IA créé pour {asset_name}")
-            except Exception as e:
-                logger.warning(f"⚠️ Erreur modèle IA {asset_name}: {e}")
-    
-    def _prepare_ml_features(self, data: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
-        """Prépare les features pour l'IA"""
-        df = data.copy()
-        
-        # Indicateurs techniques
-        df['rsi'] = ta.momentum.RSIIndicator(df['Close']).rsi()
-        df['macd'] = ta.trend.MACD(df['Close']).macd()
-        df['bb_upper'] = ta.volatility.BollingerBands(df['Close']).bollinger_hband()
-        df['bb_lower'] = ta.volatility.BollingerBands(df['Close']).bollinger_lband()
-        df['sma_20'] = ta.trend.SMAIndicator(df['Close'], window=20).sma_indicator()
-        df['ema_12'] = ta.trend.EMAIndicator(df['Close'], window=12).ema_indicator()
-        df['atr'] = ta.volatility.AverageTrueRange(df['High'], df['Low'], df['Close']).average_true_range()
-        
-        # Features temporelles
-        df['hour'] = pd.to_datetime(df.index).hour
-        df['day_of_week'] = pd.to_datetime(df.index).dayofweek
-        
-        # Volume analysis
-        df['volume_sma'] = df['Volume'].rolling(window=20).mean()
-        df['volume_ratio'] = df['Volume'] / df['volume_sma']
-        
-        # Price action
-        df['price_change'] = df['Close'].pct_change()
-        df['volatility'] = df['price_change'].rolling(window=20).std()
-        
-        # Target: mouvement futur (1 = hausse, 0 = baisse)
-        df['future_return'] = df['Close'].shift(-2) / df['Close'] - 1
-        df['target'] = (df['future_return'] > 0.002).astype(int)  # +0.2% threshold
-        
-        # Nettoyage
-        df = df.dropna()
-        
-        feature_cols = ['rsi', 'macd', 'sma_20', 'ema_12', 'atr', 'hour', 
-                       'day_of_week', 'volume_ratio', 'volatility']
-        
-        return df[feature_cols].values, df['target'].values
+    def calculate_simple_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Calcule les indicateurs techniques sans TA-Lib"""
+        try:
+            # RSI simplifié
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            df['rsi'] = 100 - (100 / (1 + rs))
+            
+            # Moyennes mobiles
+            df['sma_20'] = df['Close'].rolling(window=20).mean()
+            df['sma_50'] = df['Close'].rolling(window=50).mean()
+            df['ema_12'] = df['Close'].ewm(span=12).mean()
+            df['ema_26'] = df['Close'].ewm(span=26).mean()
+            
+            # MACD simplifié
+            df['macd'] = df['ema_12'] - df['ema_26']
+            df['macd_signal'] = df['macd'].ewm(span=9).mean()
+            df['macd_diff'] = df['macd'] - df['macd_signal']
+            
+            # Bollinger Bands simplifiées
+            df['bb_middle'] = df['Close'].rolling(window=20).mean()
+            bb_std = df['Close'].rolling(window=20).std()
+            df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
+            df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
+            
+            # Support/Résistance
+            df['resistance'] = df['High'].rolling(window=20).max()
+            df['support'] = df['Low'].rolling(window=20).min()
+            
+            # Volume
+            df['volume_sma'] = df['Volume'].rolling(window=20).mean()
+            df['volume_spike'] = df['Volume'] / df['volume_sma']
+            
+            # Volatilité (ATR simplifié)
+            high_low = df['High'] - df['Low']
+            high_close = np.abs(df['High'] - df['Close'].shift())
+            low_close = np.abs(df['Low'] - df['Close'].shift())
+            ranges = pd.concat([high_low, high_close, low_close], axis=1)
+            true_range = ranges.max(axis=1)
+            df['atr'] = true_range.rolling(window=14).mean()
+            
+            return df
+        except Exception as e:
+            logger.error(f"Erreur calcul indicateurs: {e}")
+            return df
     
     async def get_market_data(self, symbol: str, period: str = '5d', interval: str = '15m') -> pd.DataFrame:
         """Récupère les données de marché avec cache"""
         cache_key = f"{symbol}_{period}_{interval}"
         
-        # Vérifier cache (valide 5 min)
         if cache_key in self.market_data_cache:
             cached_data, timestamp = self.market_data_cache[cache_key]
             if datetime.now() - timestamp < timedelta(minutes=5):
@@ -140,64 +122,23 @@ class EnhancedMarketAnalyzer:
         try:
             data = yf.download(symbol, period=period, interval=interval)
             if not data.empty:
-                # Calcul des indicateurs
-                data = self._add_technical_indicators(data)
+                data = self.calculate_simple_indicators(data)
                 self.market_data_cache[cache_key] = (data, datetime.now())
             return data
         except Exception as e:
             logger.error(f"❌ Erreur récupération données {symbol}: {e}")
             return pd.DataFrame()
     
-    def _add_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Ajoute tous les indicateurs techniques"""
-        try:
-            # Moyennes mobiles
-            df['sma_20'] = ta.trend.SMAIndicator(df['Close'], window=20).sma_indicator()
-            df['ema_12'] = ta.trend.EMAIndicator(df['Close'], window=12).ema_indicator()
-            df['ema_26'] = ta.trend.EMAIndicator(df['Close'], window=26).ema_indicator()
-            
-            # Oscillateurs
-            df['rsi'] = ta.momentum.RSIIndicator(df['Close']).rsi()
-            df['stoch'] = ta.momentum.StochasticOscillator(df['High'], df['Low'], df['Close']).stoch()
-            
-            # MACD
-            macd = ta.trend.MACD(df['Close'])
-            df['macd'] = macd.macd()
-            df['macd_signal'] = macd.macd_signal()
-            df['macd_diff'] = macd.macd_diff()
-            
-            # Bollinger Bands
-            bb = ta.volatility.BollingerBands(df['Close'])
-            df['bb_upper'] = bb.bollinger_hband()
-            df['bb_lower'] = bb.bollinger_lband()
-            df['bb_middle'] = bb.bollinger_mavg()
-            
-            # Support/Résistance dynamiques
-            df['resistance'] = df['High'].rolling(window=20).max()
-            df['support'] = df['Low'].rolling(window=20).min()
-            
-            # Volume
-            df['volume_sma'] = df['Volume'].rolling(window=20).mean()
-            df['volume_spike'] = df['Volume'] / df['volume_sma']
-            
-            # Volatilité
-            df['atr'] = ta.volatility.AverageTrueRange(df['High'], df['Low'], df['Close']).average_true_range()
-            
-            return df
-        except Exception as e:
-            logger.error(f"Erreur calcul indicateurs: {e}")
-            return df
-    
     def detect_market_structure(self, df: pd.DataFrame) -> Dict:
-        """Détecte la structure de marché avancée"""
+        """Détecte la structure de marché"""
         if len(df) < 50:
             return {"trend": "insufficient_data", "structure": "unknown"}
         
         current_price = df['Close'].iloc[-1]
-        sma_20 = df['sma_20'].iloc[-1]
-        ema_12 = df['ema_12'].iloc[-1]
+        sma_20 = df['sma_20'].iloc[-1] if 'sma_20' in df and not pd.isna(df['sma_20'].iloc[-1]) else current_price
+        ema_12 = df['ema_12'].iloc[-1] if 'ema_12' in df and not pd.isna(df['ema_12'].iloc[-1]) else current_price
         
-        # Détection de tendance multi-timeframe
+        # Détection de tendance
         short_trend = "bullish" if current_price > ema_12 else "bearish"
         medium_trend = "bullish" if current_price > sma_20 else "bearish"
         
@@ -206,17 +147,22 @@ class EnhancedMarketAnalyzer:
         recent_lows = df['Low'].tail(20).min()
         range_size = (recent_highs - recent_lows) / current_price * 100
         
-        is_ranging = range_size < 3.0  # Range si volatilité < 3%
+        is_ranging = range_size < 3.0
         
         # Force de la tendance
-        price_momentum = (current_price / df['Close'].iloc[-20] - 1) * 100
+        price_momentum = (current_price / df['Close'].iloc[-20] - 1) * 100 if len(df) >= 20 else 0
         
         # Détection de breakout
         breakout_strength = 0
-        if current_price > df['resistance'].iloc[-2]:
-            breakout_strength = min((current_price - df['resistance'].iloc[-2]) / df['atr'].iloc[-1], 3.0)
-        elif current_price < df['support'].iloc[-2]:
-            breakout_strength = -min((df['support'].iloc[-2] - current_price) / df['atr'].iloc[-1], 3.0)
+        if 'resistance' in df and 'support' in df and 'atr' in df:
+            resistance = df['resistance'].iloc[-2] if not pd.isna(df['resistance'].iloc[-2]) else current_price
+            support = df['support'].iloc[-2] if not pd.isna(df['support'].iloc[-2]) else current_price
+            atr = df['atr'].iloc[-1] if not pd.isna(df['atr'].iloc[-1]) else 1.0
+            
+            if current_price > resistance and atr > 0:
+                breakout_strength = min((current_price - resistance) / atr, 3.0)
+            elif current_price < support and atr > 0:
+                breakout_strength = -min((support - current_price) / atr, 3.0)
         
         return {
             "trend": short_trend,
@@ -224,33 +170,93 @@ class EnhancedMarketAnalyzer:
             "is_ranging": is_ranging,
             "range_size": range_size,
             "breakout_strength": breakout_strength,
-            "support": df['support'].iloc[-1],
-            "resistance": df['resistance'].iloc[-1],
+            "support": df['support'].iloc[-1] if 'support' in df else current_price * 0.95,
+            "resistance": df['resistance'].iloc[-1] if 'resistance' in df else current_price * 1.05,
             "current_price": current_price
         }
     
+    async def initialize_ai_models(self):
+        """Initialise les modèles IA simplifiés"""
+        logger.info("🤖 Initialisation des modèles IA...")
+        
+        for asset_name, symbol in self.ASSETS.items():
+            try:
+                data = yf.download(symbol, period='3mo', interval='1h')
+                if len(data) > 100:
+                    features, targets = self._prepare_simple_features(data)
+                    if len(features) > 50:
+                        model = RandomForestClassifier(n_estimators=50, max_depth=8, random_state=42)
+                        model.fit(features, targets)
+                        self.ml_models[asset_name] = model
+                        logger.info(f"✅ Modèle IA créé pour {asset_name}")
+            except Exception as e:
+                logger.warning(f"⚠️ Erreur modèle IA {asset_name}: {e}")
+    
+    def _prepare_simple_features(self, data: pd.DataFrame):
+        """Prépare les features simplifiées pour l'IA"""
+        df = data.copy()
+        df = self.calculate_simple_indicators(df)
+        
+        # Features simples
+        df['hour'] = pd.to_datetime(df.index).hour
+        df['day_of_week'] = pd.to_datetime(df.index).dayofweek
+        df['price_change'] = df['Close'].pct_change()
+        df['volatility'] = df['price_change'].rolling(window=20).std()
+        
+        # Target
+        df['future_return'] = df['Close'].shift(-2) / df['Close'] - 1
+        df['target'] = (df['future_return'] > 0.002).astype(int)
+        
+        df = df.dropna()
+        
+        feature_cols = ['rsi', 'macd', 'sma_20', 'ema_12', 'hour', 'day_of_week', 'volatility']
+        available_cols = [col for col in feature_cols if col in df.columns and not df[col].isna().all()]
+        
+        if len(available_cols) < 3:
+            return np.array([]), np.array([])
+            
+        return df[available_cols].values, df['target'].values
+    
     def get_ai_prediction(self, asset_name: str, df: pd.DataFrame) -> Dict:
-        """Génère une prédiction IA"""
+        """Génère une prédiction IA simplifiée"""
         if asset_name not in self.ml_models or len(df) < 20:
-            return {"direction": "neutral", "confidence": 0.0}
+            return {"direction": "neutral", "confidence": 50.0}
         
         try:
             # Préparer les features actuelles
-            current_features = [
-                df['rsi'].iloc[-1],
-                df['macd'].iloc[-1],
-                df['sma_20'].iloc[-1],
-                df['ema_12'].iloc[-1],
-                df['atr'].iloc[-1],
-                datetime.now().hour,
-                datetime.now().weekday(),
-                df['volume_spike'].iloc[-1] if 'volume_spike' in df else 1.0,
-                df['Close'].pct_change().rolling(window=20).std().iloc[-1]
-            ]
+            current_features = []
             
-            # Vérifier les NaN
-            if any(pd.isna(current_features)):
-                return {"direction": "neutral", "confidence": 0.0}
+            # RSI
+            if 'rsi' in df and not pd.isna(df['rsi'].iloc[-1]):
+                current_features.append(df['rsi'].iloc[-1])
+            else:
+                current_features.append(50.0)
+            
+            # MACD
+            if 'macd' in df and not pd.isna(df['macd'].iloc[-1]):
+                current_features.append(df['macd'].iloc[-1])
+            else:
+                current_features.append(0.0)
+            
+            # SMA 20
+            if 'sma_20' in df and not pd.isna(df['sma_20'].iloc[-1]):
+                current_features.append(df['sma_20'].iloc[-1])
+            else:
+                current_features.append(df['Close'].iloc[-1])
+            
+            # EMA 12
+            if 'ema_12' in df and not pd.isna(df['ema_12'].iloc[-1]):
+                current_features.append(df['ema_12'].iloc[-1])
+            else:
+                current_features.append(df['Close'].iloc[-1])
+            
+            # Heure et jour
+            current_features.append(datetime.now().hour)
+            current_features.append(datetime.now().weekday())
+            
+            # Volatilité
+            volatility = df['Close'].pct_change().rolling(window=10).std().iloc[-1]
+            current_features.append(volatility if not pd.isna(volatility) else 0.02)
             
             # Prédiction
             model = self.ml_models[asset_name]
@@ -267,30 +273,26 @@ class EnhancedMarketAnalyzer:
             }
         except Exception as e:
             logger.error(f"Erreur prédiction IA {asset_name}: {e}")
-            return {"direction": "neutral", "confidence": 0.0}
+            return {"direction": "neutral", "confidence": 50.0}
     
     async def analyze_asset(self, asset_name: str, symbol: str) -> List[MarketAlert]:
         """Analyse complète d'un actif"""
         alerts = []
         
         try:
-            # Récupérer données multi-timeframes
             data_15m = await self.get_market_data(symbol, period='5d', interval='15m')
             data_1h = await self.get_market_data(symbol, period='10d', interval='1h')
             
             if data_15m.empty or data_1h.empty:
                 return alerts
             
-            # Analyse structure de marché
             structure_15m = self.detect_market_structure(data_15m)
             structure_1h = self.detect_market_structure(data_1h)
-            
-            # Prédiction IA
             ai_prediction = self.get_ai_prediction(asset_name, data_1h)
             
             current_price = structure_15m['current_price']
             
-            # 🔥 ALERTE BREAKOUT
+            # ALERTE BREAKOUT
             if abs(structure_15m['breakout_strength']) > self.config.min_breakout_strength:
                 direction = "📈 HAUSSIERE" if structure_15m['breakout_strength'] > 0 else "📉 BAISSIERE"
                 alert = MarketAlert(
@@ -306,7 +308,7 @@ class EnhancedMarketAnalyzer:
                 )
                 alerts.append(alert)
             
-            # 📊 ALERTE RANGE
+            # ALERTE RANGE
             if structure_15m['is_ranging'] and structure_1h['is_ranging']:
                 alert = MarketAlert(
                     asset=asset_name,
@@ -322,7 +324,7 @@ class EnhancedMarketAnalyzer:
                 )
                 alerts.append(alert)
             
-            # 🤖 ALERTE IA
+            # ALERTE IA
             if ai_prediction['confidence'] > self.config.ai_confidence_threshold:
                 emoji = "🔮📈" if ai_prediction['direction'] == "bullish" else "🔮📉"
                 alert = MarketAlert(
@@ -330,8 +332,7 @@ class EnhancedMarketAnalyzer:
                     alert_type="AI_SIGNAL",
                     message=f"{emoji} SIGNAL IA\n"
                            f"Direction: {ai_prediction['direction'].upper()}\n"
-                           f"Confiance: {ai_prediction['confidence']:.1f}%\n"
-                           f"Probabilités: 📈{ai_prediction['bullish_prob']:.0f}% | 📉{ai_prediction['bearish_prob']:.0f}%",
+                           f"Confiance: {ai_prediction['confidence']:.1f}%",
                     confidence=ai_prediction['confidence'],
                     timestamp=datetime.now(),
                     timeframe="1h",
@@ -339,22 +340,23 @@ class EnhancedMarketAnalyzer:
                 )
                 alerts.append(alert)
             
-            # 📈 ALERTE VOLUME
-            latest_volume_spike = data_15m['volume_spike'].iloc[-1] if 'volume_spike' in data_15m else 1.0
-            if latest_volume_spike > self.config.volume_spike_threshold:
-                alert = MarketAlert(
-                    asset=asset_name,
-                    alert_type="VOLUME",
-                    message=f"📊 SPIKE DE VOLUME\n"
-                           f"Volume: {latest_volume_spike:.1f}x la moyenne\n"
-                           f"Prix: ${current_price:.2f}",
-                    confidence=min(latest_volume_spike * 25, 90),
-                    timestamp=datetime.now(),
-                    timeframe="15m",
-                    price=current_price
-                )
-                alerts.append(alert)
-                
+            # ALERTE VOLUME
+            if 'volume_spike' in data_15m:
+                latest_volume_spike = data_15m['volume_spike'].iloc[-1]
+                if not pd.isna(latest_volume_spike) and latest_volume_spike > self.config.volume_spike_threshold:
+                    alert = MarketAlert(
+                        asset=asset_name,
+                        alert_type="VOLUME",
+                        message=f"📊 SPIKE DE VOLUME\n"
+                               f"Volume: {latest_volume_spike:.1f}x la moyenne\n"
+                               f"Prix: ${current_price:.2f}",
+                        confidence=min(latest_volume_spike * 25, 90),
+                        timestamp=datetime.now(),
+                        timeframe="15m",
+                        price=current_price
+                    )
+                    alerts.append(alert)
+                    
         except Exception as e:
             logger.error(f"Erreur analyse {asset_name}: {e}")
         
@@ -369,13 +371,11 @@ class EnhancedMarketAnalyzer:
         
         all_alerts = []
         
-        # Analyse de chaque actif
         for asset_name, symbol in self.ASSETS.items():
             try:
                 alerts = await self.analyze_asset(asset_name, symbol)
                 all_alerts.extend(alerts)
                 
-                # Statut rapide de l'actif
                 data = await self.get_market_data(symbol, period='2d', interval='1h')
                 if not data.empty:
                     current_price = data['Close'].iloc[-1]
@@ -384,9 +384,8 @@ class EnhancedMarketAnalyzer:
                     emoji = "📈" if change_24h > 0 else "📉"
                     report += f"{emoji} {asset_name}: ${current_price:.2f} ({change_24h:+.2f}%)\n"
                     
-                    # Ajouter alertes pour cet actif
                     asset_alerts = [a for a in alerts if a.asset == asset_name]
-                    for alert in asset_alerts[:2]:  # Max 2 alertes par actif
+                    for alert in asset_alerts[:2]:
                         report += f"   • {alert.message.replace(chr(10), ' | ')}\n"
                     
                     report += "\n"
@@ -394,28 +393,24 @@ class EnhancedMarketAnalyzer:
             except Exception as e:
                 logger.error(f"Erreur rapport {asset_name}: {e}")
         
-        # Résumé des alertes importantes
         high_confidence_alerts = [a for a in all_alerts if a.confidence > 75]
         if high_confidence_alerts:
             report += "\n🔥 ALERTES IMPORTANTES:\n"
             for alert in high_confidence_alerts[:3]:
                 report += f"• {alert.asset} - {alert.alert_type} ({alert.confidence:.0f}%)\n"
         
-        # Footer avec timestamp
         report += f"\n⏰ Dernière mise à jour: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
         report += f"\n🤖 Modèles IA actifs: {len(self.ml_models)}"
         
         return report
 
 class NotificationManager:
-    """Gestionnaire des notifications multi-canaux"""
+    """Gestionnaire des notifications"""
     
     def __init__(self, config: AlertConfig):
         self.config = config
         self.whatsapp_api_key = os.getenv('CALLMEBOT_API_KEY')
         self.whatsapp_phone = os.getenv('WHATSAPP_PHONE')
-        self.telegram_bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-        self.telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID')
     
     async def send_whatsapp(self, message: str) -> bool:
         """Envoie un message WhatsApp via CallMeBot"""
@@ -426,7 +421,7 @@ class NotificationManager:
             url = "https://api.callmebot.com/whatsapp.php"
             params = {
                 'phone': self.whatsapp_phone,
-                'text': message[:1000],  # Limite de caractères
+                'text': message[:1000],
                 'apikey': self.whatsapp_api_key
             }
             
@@ -443,79 +438,23 @@ class NotificationManager:
         except Exception as e:
             logger.error(f"Erreur WhatsApp: {e}")
             return False
-    
-    async def send_telegram(self, message: str) -> bool:
-        """Envoie un message Telegram"""
-        if not self.config.telegram_enabled or not self.telegram_bot_token:
-            return False
-            
-        try:
-            url = f"https://api.telegram.org/bot{self.telegram_bot_token}/sendMessage"
-            data = {
-                'chat_id': self.telegram_chat_id,
-                'text': message,
-                'parse_mode': 'HTML'
-            }
-            
-            response = requests.post(url, json=data, timeout=10)
-            success = response.status_code == 200
-            
-            if success:
-                logger.info("✅ Message Telegram envoyé")
-            else:
-                logger.error(f"❌ Erreur Telegram: {response.status_code}")
-                
-            return success
-            
-        except Exception as e:
-            logger.error(f"Erreur Telegram: {e}")
-            return False
-    
-    async def broadcast_alert(self, message: str):
-        """Diffuse une alerte sur tous les canaux activés"""
-        tasks = []
-        
-        if self.config.whatsapp_enabled:
-            tasks.append(self.send_whatsapp(message))
-            
-        if self.config.telegram_enabled:
-            tasks.append(self.send_telegram(message))
-        
-        if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            success_count = sum(1 for r in results if r is True)
-            logger.info(f"📱 Alertes envoyées: {success_count}/{len(tasks)}")
 
 class FinancialBot:
-    """Bot principal d'analyse financière"""
+    """Bot principal d'analyse financière simplifié"""
     
-    def __init__(self, config_path: str = 'config.json'):
-        self.config = self._load_config(config_path)
-        self.analyzer = EnhancedMarketAnalyzer(self.config)
+    def __init__(self):
+        self.config = AlertConfig()
+        self.analyzer = SimplifiedMarketAnalyzer(self.config)
         self.notifier = NotificationManager(self.config)
         self.scheduler = AsyncIOScheduler()
         self.is_running = False
         
-    def _load_config(self, config_path: str) -> AlertConfig:
-        """Charge la configuration depuis un fichier JSON"""
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as f:
-                    data = json.load(f)
-                    return AlertConfig(**data)
-        except Exception as e:
-            logger.warning(f"Erreur chargement config: {e}")
-        
-        return AlertConfig()  # Configuration par défaut
-    
     async def initialize(self):
-        """Initialise le bot et ses composants"""
+        """Initialise le bot"""
         logger.info("🚀 Initialisation du Bot d'Analyse Financière IA")
         
-        # Initialiser les modèles IA
         await self.analyzer.initialize_ai_models()
         
-        # Configurer le planificateur
         self.scheduler.add_job(
             self.auto_analysis,
             'interval',
@@ -530,11 +469,8 @@ class FinancialBot:
         try:
             logger.info("🔄 Début de l'analyse automatique...")
             
-            # Générer le rapport
             report = await self.analyzer.generate_market_report()
-            
-            # Envoyer les notifications
-            await self.notifier.broadcast_alert(report)
+            await self.notifier.send_whatsapp(report)
             
             logger.info("✅ Analyse automatique terminée")
             
@@ -545,7 +481,6 @@ class FinancialBot:
         """Analyse manuelle sur demande"""
         try:
             if asset and asset.upper() in self.analyzer.ASSETS:
-                # Analyse d'un actif spécifique
                 symbol = self.analyzer.ASSETS[asset.upper()]
                 alerts = await self.analyzer.analyze_asset(asset.upper(), symbol)
                 
@@ -559,7 +494,6 @@ class FinancialBot:
                 
                 return response
             else:
-                # Rapport complet
                 return await self.analyzer.generate_market_report()
                 
         except Exception as e:
@@ -574,7 +508,6 @@ class FinancialBot:
         logger.info("🟢 Démarrage du bot...")
         
         await self.initialize()
-        
         self.scheduler.start()
         self.is_running = True
         
@@ -589,13 +522,11 @@ class FinancialBot:
             return
             
         logger.info("🔴 Arrêt du bot...")
-        
         self.scheduler.shutdown()
         self.is_running = False
-        
         logger.info("✅ Bot arrêté")
 
-# API Web simple pour contrôle manuel
+# API Web simple
 from aiohttp import web
 import aiohttp_cors
 
@@ -620,7 +551,7 @@ class WebAPI:
         async def manual_analysis(request):
             asset = request.query.get('asset')
             result = await self.bot.manual_analysis(asset)
-            return web.Response(text=result, content_type='text/plain')
+            return web.Response(text=result, content_type='text/plain; charset=utf-8')
         
         async def start_bot(request):
             await self.bot.start()
@@ -630,7 +561,6 @@ class WebAPI:
             await self.bot.stop()
             return web.json_response({"message": "Bot arrêté"})
         
-        # Routes
         self.app.router.add_get('/', health_check)
         self.app.router.add_get('/health', health_check)
         self.app.router.add_get('/analyze', manual_analysis)
@@ -650,27 +580,13 @@ class WebAPI:
         for route in list(self.app.router.routes()):
             cors.add(route)
 
-# Point d'entrée principal
 async def main():
     """Fonction principale"""
     
-    # Configuration par défaut (à modifier selon vos besoins)
-    config = AlertConfig(
-        whatsapp_enabled=True,
-        auto_frequency_minutes=15,
-        ai_confidence_threshold=65.0,
-        min_breakout_strength=0.6
-    )
-    
-    # Créer et démarrer le bot
     bot = FinancialBot()
-    bot.config = config
-    
-    # Démarrer l'API web (optionnel)
     web_api = WebAPI(bot)
     
     try:
-        # Démarrer le bot
         await bot.start()
         
         # Démarrer le serveur web
@@ -695,20 +611,11 @@ async def main():
         await bot.stop()
 
 if __name__ == "__main__":
-    # Variables d'environnement requises
-    required_vars = [
-        'CALLMEBOT_API_KEY',  # Clé API CallMeBot
-        'WHATSAPP_PHONE'      # Numéro WhatsApp
-    ]
-    
     # Vérifier les variables d'environnement
+    required_vars = ['CALLMEBOT_API_KEY', 'WHATSAPP_PHONE']
     missing_vars = [var for var in required_vars if not os.getenv(var)]
+    
     if missing_vars:
         logger.error(f"❌ Variables d'environnement manquantes: {missing_vars}")
-        logger.info("Créez un fichier .env avec ces variables ou définissez-les dans votre système")
-    
-    # Démarrer le bot
-    try:
+    else:
         asyncio.run(main())
-    except Exception as e:
-        logger.error(f"💥 Erreur de démarrage: {e}")
